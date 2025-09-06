@@ -61,14 +61,14 @@ fi
 echo -e "${GREEN}[+] Tor service is running properly.${NC}"
 
 # Check script permissions
-if [ ! -x "$DIR/tor_ip_suite_clean.py" ]; then
+if [ ! -x "$DIR/tor_ip_changer.py" ]; then
     echo -e "${YELLOW}[*] Making script executable...${NC}"
-    chmod +x "$DIR/tor_ip_suite_clean.py"
+    chmod +x "$DIR/tor_ip_changer.py"
 fi
 
-if [ ! -x "$DIR/security_tools_clean.py" ]; then
+if [ ! -x "$DIR/tor_security_tools.py" ]; then
     echo -e "${YELLOW}[*] Making security tools executable...${NC}"
-    chmod +x "$DIR/security_tools_clean.py"
+    chmod +x "$DIR/tor_security_tools.py"
 fi
 
 # Check for Python dependencies
@@ -89,4 +89,4 @@ fi
 
 # Forward arguments to the Python script
 echo -e "${GREEN}[+] Launching Tor IP Suite...${NC}"
-python3 "$DIR/tor_ip_suite_clean.py" "$@"
+python3 "$DIR/tor_ip_changer.py" "$@"

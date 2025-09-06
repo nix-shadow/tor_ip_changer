@@ -1,4 +1,4 @@
-# Tor IP Suite
+# Tor IP Changer
 
 A comprehensive suite for ethical hackers to manage Tor connections, change IPs, and perform security testing.
 
@@ -23,8 +23,8 @@ A comprehensive suite for ethical hackers to manage Tor connections, change IPs,
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/tor-ip-suite.git
-   cd tor-ip-suite
+   git clone https://github.com/nix-shadow/tor_ip_changer.git
+   cd tor_ip_changer
    ```
 
 2. Make sure you have Python 3.6+ and Tor installed:
@@ -40,7 +40,7 @@ A comprehensive suite for ethical hackers to manage Tor connections, change IPs,
 
 4. Make scripts executable:
    ```bash
-   chmod +x tor_suite_clean.sh tor_ip_suite_clean.py security_tools_clean.py
+   chmod +x tor_launcher.sh tor_ip_changer.py tor_security_tools.py
    ```
 
 ## Usage
@@ -48,7 +48,7 @@ A comprehensive suite for ethical hackers to manage Tor connections, change IPs,
 Run the main wrapper script to access all features:
 
 ```bash
-./tor_suite_clean.sh
+./tor_launcher.sh
 ```
 
 You'll be presented with a menu of options:
@@ -66,11 +66,11 @@ You'll be presented with a menu of options:
 You can also use command-line arguments for direct access to specific functions:
 
 ```bash
-python3 tor_ip_suite_clean.py --change-ip
-python3 tor_ip_suite_clean.py --check-ip
-python3 tor_ip_suite_clean.py --monitor-ip
-python3 security_tools_clean.py --scan-website example.com
-python3 security_tools_clean.py --scan-ports 192.168.1.1
+python3 tor_ip_changer.py --change-ip
+python3 tor_ip_changer.py --check-ip
+python3 tor_ip_changer.py --monitor-ip
+python3 tor_security_tools.py --scan-website example.com
+python3 tor_security_tools.py --scan-ports 192.168.1.1
 ```
 
 ## Requirements
