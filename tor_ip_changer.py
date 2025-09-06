@@ -23,6 +23,18 @@ from collections import Counter
 
 VERSION = "3.5.0"
 
+# ANSI colors for terminal output
+COLORS = {
+    "RED": "\033[91m",
+    "GREEN": "\033[92m",
+    "YELLOW": "\033[93m",
+    "BLUE": "\033[94m",
+    "PURPLE": "\033[95m",
+    "CYAN": "\033[96m",
+    "RESET": "\033[0m",
+    "BOLD": "\033[1m",
+}
+
 # Handle dependencies
 packages_missing = False
 try:
@@ -44,18 +56,6 @@ if packages_missing:
     print("Or activate the virtual environment:")
     print(f"\n    source {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venv/bin/activate')}\n")
     sys.exit(1)
-
-# ANSI colors for terminal output
-COLORS = {
-    "RED": "\033[91m",
-    "GREEN": "\033[92m",
-    "YELLOW": "\033[93m",
-    "BLUE": "\033[94m",
-    "PURPLE": "\033[95m",
-    "CYAN": "\033[96m",
-    "RESET": "\033[0m",
-    "BOLD": "\033[1m",
-}
 
 # Default port configurations
 DEFAULT_SOCKS_PORT = 9050
