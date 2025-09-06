@@ -307,19 +307,56 @@ def get_ip_details(ip=None):
         if not ip:
             return None
     
-    try:
-        with get_tor_session() as session:
-            response = session.get(f"https://ipapi.co/{ip}/json/", timeout=10)
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        error(f"Error getting IP details: {e}")
+    # Try multiple geolocation services
+    services = [
+        # Format: (URL format string, response handler function)
+        (f"https://ipapi.co/{ip}/json/", lambda r: r.json()),
+        (f"https://ipinfo.io/{ip}/json", lambda r: r.json()),
+        (f"https://freegeoip.app/json/{ip}", lambda r: r.json()),
+        (f"https://extreme-ip-lookup.com/json/{ip}", lambda r: r.json())
+    ]
     
-    return None
+    for service_url, handler in services:
+        try:
+            with get_tor_session() as session:
+                response = session.get(service_url, timeout=5)  # Shorter timeout
+                if response.status_code == 200:
+                    data = handler(response)
+                    
+                    # Normalize response data to a common format
+                    ip_details = {
+                        "ip": ip,
+                        "country": data.get("country_name", data.get("country", "Unknown")),
+                        "country_code": data.get("country_code", data.get("countryCode", "Unknown")),
+                        "region": data.get("region", data.get("regionName", data.get("region_name", "Unknown"))),
+                        "city": data.get("city", "Unknown"),
+                        "isp": data.get("org", data.get("isp", "Unknown")),
+                        "latitude": data.get("latitude", data.get("lat", 0)),
+                        "longitude": data.get("longitude", data.get("lon", 0)),
+                        "timezone": data.get("timezone", data.get("timeZone", "Unknown")),
+                        "source": service_url
+                    }
+                    return ip_details
+        except Exception as e:
+            warning(f"Failed to get IP details from {service_url}: {e}")
+    
+    # Fallback: Create basic info if all services fail
+    warning("All geolocation services failed, using basic info only")
+    return {
+        "ip": ip,
+        "country": "Unknown", 
+        "country_code": "XX",
+        "region": "Unknown",
+        "city": "Unknown",
+        "isp": "Unknown",
+        "source": "local"
+    }
 
 def change_ip():
     """Request a new Tor circuit to change IP"""
-    # First try with control port
+    original_ip = get_current_ip()
+    
+    # Method 1: Use the control port with authentication
     try:
         with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
             # Try all authentication methods one by one
@@ -339,64 +376,86 @@ def change_ip():
             ]
             
             # Try all authentication methods
+            auth_success = False
             for auth_method in auth_methods:
                 try:
                     auth_method()
-                    # If we get here, authentication worked
+                    auth_success = True
                     break
                 except Exception:
                     continue
             
-            # Send signal to get new identity
-            controller.signal(Signal.NEWNYM)
-            success("Successfully requested new Tor circuit")
-            return True
+            if not auth_success:
+                raise Exception("All authentication methods failed")
+                
+            try:
+                # Try to send the NEWNYM signal directly
+                controller.signal(Signal.NEWNYM)
+                success("Successfully requested new Tor circuit")
+                
+                # Verify IP actually changed
+                time.sleep(3)  # Give Tor time to establish a new circuit
+                new_ip = get_current_ip()
+                if new_ip and new_ip != original_ip:
+                    success(f"IP changed: {original_ip} -> {new_ip}")
+                    return True
+                else:
+                    warning("Signal sent but IP didn't change, trying other methods")
+            except Exception as e:
+                warning(f"NEWNYM signal failed: {e}")
+                # If signal fails, try a different approach
+                try:
+                    # Try a lower-level command that bypasses signal() method
+                    response = controller.msg("SIGNAL NEWNYM")
+                    if response.is_ok():
+                        success("Successfully requested new circuit via direct command")
+                        time.sleep(3)
+                        new_ip = get_current_ip()
+                        if new_ip and new_ip != original_ip:
+                            success(f"IP changed: {original_ip} -> {new_ip}")
+                            return True
+                except Exception as e:
+                    warning(f"Direct SIGNAL command failed: {e}")
     except Exception as e:
-        error(f"Failed to change Tor circuit using control port: {e}")
+        warning(f"Control port method failed: {e}")
     
-    # If control port doesn't work, try alternative methods
+    # Method 2: Try using saved passwords
     try:
-        # Try using the saved password file
         if os.path.exists(TOR_PASSWORD_FILE):
             with open(TOR_PASSWORD_FILE, 'r') as f:
                 for line in f:
                     if line.startswith('# Plaintext password'):
                         plaintext_password = line.split(':')[1].strip()
-                        with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
-                            controller.authenticate(password=plaintext_password)
-                            controller.signal(Signal.NEWNYM)
-                            success("Successfully requested new Tor circuit using saved password")
-                            return True
+                        try:
+                            with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
+                                controller.authenticate(password=plaintext_password)
+                                controller.signal(Signal.NEWNYM)
+                                success("Successfully requested new Tor circuit using saved password")
+                                time.sleep(3)
+                                new_ip = get_current_ip()
+                                if new_ip and new_ip != original_ip:
+                                    return True
+                        except Exception:
+                            pass
     except Exception:
         pass
-        
-    # Try using the TOR_CONTROL_PASSWORD environment variable if set
-    try:
-        if os.environ.get("TOR_CONTROL_PASSWORD"):
-            with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
-                controller.authenticate(password=os.environ.get("TOR_CONTROL_PASSWORD"))
-                controller.signal(Signal.NEWNYM)
-                success("Successfully requested new Tor circuit using environment password")
-                return True
-    except Exception:
-        pass
-        
-    # As a last resort, try to restart Tor via shell command
-    try:
-        warning("Attempting to restart Tor service via shell command")
-        if platform.system() == "Linux":
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "tor"], 
-                capture_output=True, 
-                text=True
-            )
-            if result.returncode == 0:
-                success("Successfully restarted Tor service")
-                time.sleep(5)  # Give Tor time to restart
-                return True
-    except Exception as e:
-        error(f"Failed to restart Tor service: {e}")
     
+    # Method 3: As a last resort, restart Tor
+    warning("Control port methods failed, restarting Tor service")
+    if restart_tor_service():
+        success("Successfully restarted Tor service")
+        time.sleep(5)  # Give Tor time to restart
+        
+        # Verify IP actually changed
+        new_ip = get_current_ip()
+        if new_ip and new_ip != original_ip:
+            success(f"IP changed after restart: {original_ip} -> {new_ip}")
+            return True
+        else:
+            warning("Restarted Tor but IP didn't change")
+    
+    # If we get here, all methods failed
+    error("All methods to change IP failed")
     return False
 
 def check_current_ip():
@@ -413,15 +472,20 @@ def check_current_ip():
     # Get additional details
     details = get_ip_details(ip)
     if details:
-        print(f"Country: {details.get('country_name', 'Unknown')} ({details.get('country_code', 'Unknown')})")
+        print(f"Country: {details.get('country', 'Unknown')} ({details.get('country_code', 'Unknown')})")
         print(f"Region: {details.get('region', 'Unknown')}")
         print(f"City: {details.get('city', 'Unknown')}")
-        print(f"ISP: {details.get('org', 'Unknown')}")
+        print(f"ISP: {details.get('isp', 'Unknown')}")
+        if details.get('source') != 'local':
+            print(f"Source: {details.get('source', 'Unknown')}")
         
         # Save to history
         record_ip(details)
     else:
         print("Could not retrieve detailed information")
+        # Save basic info to history
+        record_ip({"ip": ip, "country": "Unknown", "country_code": "XX", "region": "Unknown", 
+                   "city": "Unknown", "isp": "Unknown", "timestamp": datetime.now().isoformat()})
 
 def record_ip(ip_data):
     """Record IP data to history"""
@@ -432,13 +496,13 @@ def record_ip(ip_data):
     
     # Create record
     record = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": ip_data.get("timestamp") or datetime.now().isoformat(),
         "ip": ip_data.get("ip", "Unknown"),
-        "country": ip_data.get("country_name", "Unknown"),
+        "country": ip_data.get("country", ip_data.get("country_name", "Unknown")),
         "country_code": ip_data.get("country_code", "Unknown"),
         "region": ip_data.get("region", "Unknown"),
         "city": ip_data.get("city", "Unknown"),
-        "isp": ip_data.get("org", "Unknown"),
+        "isp": ip_data.get("isp", ip_data.get("org", "Unknown")),
     }
     
     # Add to history
@@ -450,6 +514,8 @@ def record_ip(ip_data):
             json.dump(ip_history, f, indent=2)
     except Exception as e:
         error(f"Failed to save IP history: {e}")
+        
+    return record
 
 def load_ip_history():
     """Load IP history from file"""
@@ -584,20 +650,35 @@ def start_ip_monitor_thread():
         last_ip = None
         
         while not stop_threads:
-            current = get_current_ip()
-            
-            if current and current != last_ip:
-                success(f"IP changed: {current}")
-                ip_details = get_ip_details(current)
-                if ip_details:
-                    record_ip(ip_details)
-                last_ip = current
-            
-            # Check every 60 seconds
-            for _ in range(60):
-                if stop_threads:
-                    break
-                time.sleep(1)
+            try:
+                current = get_current_ip()
+                
+                if current and current != last_ip:
+                    if last_ip:
+                        success(f"IP changed: {last_ip} -> {current}")
+                    else:
+                        success(f"Initial IP: {current}")
+                    
+                    ip_details = get_ip_details(current)
+                    if ip_details:
+                        country_info = f" ({ip_details.get('country', 'Unknown')})"
+                        success(f"New IP location{country_info}")
+                        record = record_ip(ip_details)
+                    else:
+                        # Record basic info if details not available
+                        record = record_ip({"ip": current, "timestamp": datetime.now().isoformat()})
+                    
+                    last_ip = current
+                
+                # Check every 30 seconds - more responsive
+                for _ in range(30):
+                    if stop_threads:
+                        break
+                    time.sleep(1)
+            except Exception as e:
+                warning(f"Monitor error: {e}")
+                # Continue monitoring despite errors
+                time.sleep(10)
     
     ip_monitor_thread = threading.Thread(target=run_monitor)
     ip_monitor_thread.daemon = True
