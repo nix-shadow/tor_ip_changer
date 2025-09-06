@@ -32,6 +32,56 @@ if ! command -v tor &> /dev/null; then
     sudo apt update && sudo apt install -y tor
 fi
 
+# Function to configure Tor for better permissions
+configure_tor() {
+    echo -e "${YELLOW}[*] Configuring Tor for better permissions...${NC}"
+    
+    # Check if torrc exists
+    TORRC_PATH="/etc/tor/torrc"
+    if [ ! -f "$TORRC_PATH" ]; then
+        echo -e "${RED}[!] Tor configuration file not found.${NC}"
+        return 1
+    fi
+    
+    # Check if control port is already configured
+    grep -q "ControlPort 9051" "$TORRC_PATH"
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}[*] Adding ControlPort configuration...${NC}"
+        echo "ControlPort 9051" | sudo tee -a "$TORRC_PATH" > /dev/null
+        MODIFIED=1
+    fi
+    
+    # Check if cookie authentication is configured
+    grep -q "CookieAuthentication 1" "$TORRC_PATH"
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}[*] Enabling cookie authentication...${NC}"
+        echo "CookieAuthentication 1" | sudo tee -a "$TORRC_PATH" > /dev/null
+        MODIFIED=1
+    fi
+    
+    # Check if cookie file is readable
+    grep -q "CookieAuthFileGroupReadable 1" "$TORRC_PATH"
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}[*] Making cookie file group readable...${NC}"
+        echo "CookieAuthFileGroupReadable 1" | sudo tee -a "$TORRC_PATH" > /dev/null
+        MODIFIED=1
+    fi
+    
+    # Add current user to the Tor group
+    if [ -n "$(getent group debian-tor)" ]; then
+        echo -e "${YELLOW}[*] Adding user to tor group...${NC}"
+        sudo usermod -a -G debian-tor "$(whoami)"
+        MODIFIED=1
+    fi
+    
+    # If we modified the config, restart Tor
+    if [ -n "$MODIFIED" ]; then
+        echo -e "${YELLOW}[*] Restarting Tor service to apply new configuration...${NC}"
+        sudo systemctl restart tor
+        sleep 3
+    fi
+}
+
 # Check for Tor service
 echo -e "${YELLOW}[*] Checking Tor service...${NC}"
 curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s https://check.torproject.org > /dev/null
@@ -66,9 +116,15 @@ if [ $? -ne 0 ]; then
             exit 1
         fi
     fi
+else
+    echo -e "${GREEN}[+] Tor service is running properly.${NC}"
+    
+    # Configure Tor for better permissions if needed
+    read -p "Do you want to configure Tor for better permissions? (y/n): " response
+    if [[ "$response" == "y" ]]; then
+        configure_tor
+    fi
 fi
-
-echo -e "${GREEN}[+] Tor service is running properly.${NC}"
 
 # Check script permissions
 if [ ! -x "$DIR/tor_ip_changer.py" ]; then

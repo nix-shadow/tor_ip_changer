@@ -61,6 +61,9 @@ if packages_missing:
 DEFAULT_SOCKS_PORT = 9050
 DEFAULT_CTRL_PORT = 9051
 
+# Path to store Tor password hash
+TOR_PASSWORD_FILE = os.path.join(os.path.expanduser("~"), ".tor-password-hash")
+
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, "data")
@@ -112,6 +115,43 @@ def warning(message):
 def error(message):
     """Print error message"""
     print(colorize(f"[-] {message}", "RED"))
+
+def setup_tor_password():
+    """Set up Tor with password authentication"""
+    # Generate a random password
+    password = ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=16))
+    
+    try:
+        # Generate password hash
+        result = subprocess.run(
+            ["tor", "--hash-password", password],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        # Extract hash from output
+        hash_lines = result.stdout.strip().split('\n')
+        password_hash = next((line for line in hash_lines if line.startswith('16:')), None)
+        
+        if not password_hash:
+            error("Failed to generate Tor password hash")
+            return None, None
+        
+        # Save password and hash to file
+        with open(TOR_PASSWORD_FILE, 'w') as f:
+            f.write(f"HashedControlPassword {password_hash}\n")
+            f.write(f"# Plaintext password (for script use only): {password}\n")
+        
+        os.chmod(TOR_PASSWORD_FILE, 0o600)  # Make file only readable by owner
+        
+        info(f"Tor password hash saved to {TOR_PASSWORD_FILE}")
+        info("Add the 'HashedControlPassword' line to your torrc file")
+        
+        return password, password_hash
+    except Exception as e:
+        error(f"Error setting up Tor password: {e}")
+        return None, None
 
 def clear_screen():
     """Clear the terminal screen"""
@@ -201,26 +241,85 @@ def get_ip_details(ip=None):
 
 def change_ip():
     """Request a new Tor circuit to change IP"""
+    # First try with control port
     try:
-        # Try different authentication methods
         with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
-            try:
-                # Try with no password (default)
-                controller.authenticate()
-            except Exception:
-                try:
-                    # Try with empty password
-                    controller.authenticate("")
-                except Exception:
-                    # Last resort - use a common password 'password'
-                    controller.authenticate("password")
+            # Try all authentication methods one by one
+            auth_methods = [
+                lambda: controller.authenticate(),  # No password
+                lambda: controller.authenticate(""),  # Empty password
+                lambda: controller.authenticate("password"),  # Common password
+                # Try to read cookie file with different methods
+                lambda: controller.authenticate(path="/var/run/tor/control.authcookie"),
+                lambda: controller.authenticate(path="/var/lib/tor/control.authcookie"),
+                lambda: controller.authenticate(path="/run/tor/control.authcookie"),
+                # Try with cookie file but different permission handling
+                lambda: controller.authenticate(
+                    cookie_path="/run/tor/control.authcookie",
+                    chroot_path=None
+                )
+            ]
             
+            # Try all authentication methods
+            for auth_method in auth_methods:
+                try:
+                    auth_method()
+                    # If we get here, authentication worked
+                    break
+                except Exception:
+                    continue
+            
+            # Send signal to get new identity
             controller.signal(Signal.NEWNYM)
             success("Successfully requested new Tor circuit")
             return True
     except Exception as e:
-        error(f"Failed to change Tor circuit: {e}")
-        return False
+        error(f"Failed to change Tor circuit using control port: {e}")
+    
+    # If control port doesn't work, try alternative methods
+    try:
+        # Try using the saved password file
+        if os.path.exists(TOR_PASSWORD_FILE):
+            with open(TOR_PASSWORD_FILE, 'r') as f:
+                for line in f:
+                    if line.startswith('# Plaintext password'):
+                        plaintext_password = line.split(':')[1].strip()
+                        with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
+                            controller.authenticate(password=plaintext_password)
+                            controller.signal(Signal.NEWNYM)
+                            success("Successfully requested new Tor circuit using saved password")
+                            return True
+    except Exception:
+        pass
+        
+    # Try using the TOR_CONTROL_PASSWORD environment variable if set
+    try:
+        if os.environ.get("TOR_CONTROL_PASSWORD"):
+            with Controller.from_port(port=DEFAULT_CTRL_PORT) as controller:
+                controller.authenticate(password=os.environ.get("TOR_CONTROL_PASSWORD"))
+                controller.signal(Signal.NEWNYM)
+                success("Successfully requested new Tor circuit using environment password")
+                return True
+    except Exception:
+        pass
+        
+    # As a last resort, try to restart Tor via shell command
+    try:
+        warning("Attempting to restart Tor service via shell command")
+        if platform.system() == "Linux":
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", "tor"], 
+                capture_output=True, 
+                text=True
+            )
+            if result.returncode == 0:
+                success("Successfully restarted Tor service")
+                time.sleep(5)  # Give Tor time to restart
+                return True
+    except Exception as e:
+        error(f"Failed to restart Tor service: {e}")
+    
+    return False
 
 def check_current_ip():
     """Display current IP information"""
@@ -654,6 +753,7 @@ def show_main_menu():
         print(colorize("5. Stop IP Monitor", "BLUE"))
         print(colorize("6. View IP Statistics", "BLUE"))
         print(colorize("7. Start Both IP Changer and Monitor", "BLUE"))
+        print(colorize("8. Configure Tor Authentication", "BLUE"))
         print(colorize("S. Security Tools", "PURPLE"))
         print(colorize("0. Exit", "RED"))
         print()
@@ -697,6 +797,22 @@ def show_main_menu():
                 if not monitor_running:
                     start_ip_monitor_thread()
                 input(colorize("Press Enter to continue...", "GREEN"))
+                
+            elif choice == "8":
+                print_header("Tor Authentication Configuration")
+                print("This will help configure Tor for password authentication.")
+                print("This is useful if you're having permission issues.")
+                confirm = input(colorize("Generate a new Tor password? (y/n): ", "YELLOW")).lower()
+                if confirm == "y":
+                    password, password_hash = setup_tor_password()
+                    if password and password_hash:
+                        print("\nTo configure Tor, add the following to /etc/tor/torrc:")
+                        print(colorize(f"HashedControlPassword {password_hash}", "CYAN"))
+                        print("\nThen restart Tor with: sudo systemctl restart tor")
+                        print(f"Your plaintext password is: {colorize(password, 'GREEN')}")
+                        print("Remember this password for authentication.")
+                        print("You can also find this information in:", colorize(TOR_PASSWORD_FILE, "YELLOW"))
+                input(colorize("Press Enter to continue...", "GREEN"))
             
             elif choice.upper() == "S":
                 show_security_menu()
@@ -735,6 +851,7 @@ def main():
     parser.add_argument("--stats", action="store_true", help="View IP statistics")
     parser.add_argument("--days", type=int, default=7, help="Number of days for statistics")
     parser.add_argument("--scan", type=str, help="URL to scan for security issues")
+    parser.add_argument("--configure-tor", action="store_true", help="Configure Tor authentication")
     
     args = parser.parse_args()
     
@@ -752,7 +869,16 @@ def main():
         return 1
     
     # Process command line args
-    if args.check:
+    if args.configure_tor:
+        print_header("Tor Authentication Configuration")
+        password, password_hash = setup_tor_password()
+        if password and password_hash:
+            print("\nTo configure Tor, add the following to /etc/tor/torrc:")
+            print(colorize(f"HashedControlPassword {password_hash}", "CYAN"))
+            print("\nThen restart Tor with: sudo systemctl restart tor")
+            print(f"Your plaintext password is: {colorize(password, 'GREEN')}")
+            return 0
+    elif args.check:
         check_current_ip()
     elif args.change:
         if change_ip():
