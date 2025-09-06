@@ -35,7 +35,14 @@ A comprehensive suite for ethical hackers to manage Tor connections, change IPs,
 
 3. Install Python dependencies:
    ```bash
-   pip3 install requests stem PySocks
+   # Create virtual environment
+   python3 -m venv venv
+   
+   # Activate virtual environment
+   source venv/bin/activate
+   
+   # Install dependencies
+   pip install requests stem PySocks
    ```
 
 4. Make scripts executable:
