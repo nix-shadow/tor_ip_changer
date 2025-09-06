@@ -1,0 +1,27 @@
+# Python byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Tor data
+.tor-data/
+
+# IDE settings
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Runtime data
+data/
+!data/.gitkeep
+
+# System files
+.DS_Store
+Thumbs.db
