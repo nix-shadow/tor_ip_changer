@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Tor IP Suite - Streamlined Tool for Ethical Hacking
+ShadowIP - Streamlined Tool for Ethical Hacking
 A comprehensive suite for anonymity, security testing, and network analysis through Tor
+
+Made by Shadow
 """
 
 import os
@@ -21,7 +23,8 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from collections import Counter
 
-VERSION = "3.5.0"
+VERSION = "4.0.0"
+AUTHOR = "Shadow"
 
 # ANSI colors for terminal output
 COLORS = {
@@ -1080,7 +1083,8 @@ def show_security_menu():
     """Display the security tools menu"""
     while True:
         clear_screen()
-        print_header("Tor Security Tools")
+        print_header("ShadowIP Security Tools")
+        print(colorize("Ethical Security Testing Suite", "PURPLE"))
         
         print(colorize("1. Security Scan", "BLUE"))
         print(colorize("2. Port Scan", "BLUE"))
@@ -1184,7 +1188,8 @@ def show_main_menu():
     
     while True:
         clear_screen()
-        print_header(f"Tor IP Suite v{VERSION}")
+        print_header(f"ShadowIP v{VERSION}")
+        print(colorize(f"Made by {AUTHOR}", "PURPLE"))
         
         # Status
         changer_running = ip_changer_thread and ip_changer_thread.is_alive()

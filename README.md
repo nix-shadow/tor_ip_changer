@@ -1,4 +1,6 @@
-# Tor IP Changer
+# ShadowIP - Tor IP Changer
+
+*Made by Shadow*
 
 A comprehensive toolset for changing, monitoring, and analyzing your IP address using the Tor network.
 

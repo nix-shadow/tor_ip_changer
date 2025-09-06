@@ -1,6 +1,7 @@
 """
-Security Tools Module for Tor IP Suite
+ShadowIP Security Tools Module
 Provides security testing functions through Tor network
+Made by Shadow
 """
 
 import os

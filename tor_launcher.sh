@@ -14,8 +14,9 @@ NC='\033[0m' # No Color
 
 # Print header
 echo -e "${BLUE}============================================================${NC}"
-echo -e "${GREEN}Tor IP Suite - Ethical Hacking & Security Tools${NC}"
+echo -e "${GREEN}ShadowIP - ${NC}"
 echo -e "${BLUE}============================================================${NC}"
+echo -e "${CYAN}Made by Shadow${NC}"
 echo
 
 # Check Python version

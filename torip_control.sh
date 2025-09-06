@@ -1,6 +1,7 @@
 #!/bin/bash
-# Tor IP Control Panel
-# This script provides a menu-based interface for the Tor IP Changer suite
+# ShadowIP Control Panel
+# This script provides a menu-based interface for the ShadowIP suite
+# Made by Shadow
 
 # ANSI colors
 RED='\033[0;31m'
@@ -21,7 +22,8 @@ chmod +x "$DIR/tor_ip_changer.py" "$DIR/tor_launcher.sh" "$DIR/torip_checker.py"
 show_header() {
     clear
     echo -e "${BLUE}============================================================${NC}"
-    echo -e "${GREEN}Tor IP Changer - Control Panel${NC}"
+    echo -e "${GREEN}ShadowIP - Control Panel${NC}"
+    echo -e "${CYAN}Made by Shadow${NC}"
     echo -e "${BLUE}============================================================${NC}"
     echo ""
 }
