@@ -1,99 +1,20 @@
 # Tor IP Changer
 
-A comprehensive suite for ethical hackers to manage Tor connections, change IPs, and perform security testing.
+A comprehensive toolset for changing, monitoring, and analyzing your IP address using the Tor network.
 
 ## Features
 
-- **IP Management**
-  - Automatic IP changing with configurable intervals
-  - Real-time IP monitoring and tracking
-  - Geographic IP statistics and analysis
-
-- **Security Tools**
-  - Website security scanning through Tor
-  - Port scanning via Tor network
-  - Security reports generation and management
-
-- **User Interface**
-  - Clean terminal-based menu interface
-  - Command-line arguments for automation
-  - Detailed logging and feedback
-
-## Installation
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/nix-shadow/tor_ip_changer.git
-   cd tor_ip_changer
-   ```
-
-2. Make sure you have Python 3.6+ and Tor installed:
-   ```bash
-   sudo apt update
-   sudo apt install tor python3 python3-pip
-   ```
-
-3. Install Python dependencies:
-   ```bash
-   # Create virtual environment
-   python3 -m venv venv
-   
-   # Activate virtual environment
-   source venv/bin/activate
-   
-   # Install dependencies
-   pip install requests stem PySocks
-   ```
-
-4. Make scripts executable:
-   ```bash
-   chmod +x tor_launcher.sh tor_ip_changer.py tor_security_tools.py
-   ```
-
-## Usage
-
-Run the main wrapper script to access all features:
-
-```bash
-./tor_launcher.sh
-```
-
-You'll be presented with a menu of options:
-
-1. **IP Changer** - Change your IP address at specified intervals
-2. **IP Checker** - Check your current IP and geographical information
-3. **IP Monitor** - Track and log IP changes over time
-4. **IP Stats** - View statistics about your IP history
-5. **Website Scanner** - Scan websites for security vulnerabilities through Tor
-6. **Port Scanner** - Scan ports on target systems via Tor network
-7. **Tor Control** - Manage the Tor service (start, stop, restart)
-
-### Command Line Arguments
-
-You can also use command-line arguments for direct access to specific functions:
-
-```bash
-python3 tor_ip_changer.py --change-ip
-python3 tor_ip_changer.py --check-ip
-python3 tor_ip_changer.py --monitor-ip
-python3 tor_security_tools.py --scan-website example.com
-python3 tor_security_tools.py --scan-ports 192.168.1.1
-```
-
-## Requirements
-
-- Python 3.6+
-- Tor service
-- Python packages: requests, stem, PySocks
-
-## Ethical Use Statement
-
-This tool is designed for ethical use only, including:
-- Network security testing with proper authorization
-- Privacy research and education
-- Personal anonymity protection
-
-Unauthorized scanning or testing of systems is illegal and unethical.
+- **Automatic IP Changing**: Changes your IP address every 5-10 seconds (configurable)
+- **IP Monitoring**: Real-time tracking of IP changes with statistics
+- **IP Analytics**: Visualizations and statistics about your Tor exit nodes
+- **User-Friendly Control Panel**: Menu-based interface for all functions
+- **Smart Auto-Configuration**: 
+  - Auto-detects and installs required dependencies
+  - Automatically configures Tor service if needed
+  - Falls back to user-space Tor if system Tor isn't accessible
+- **Cross-Platform**: Works on Linux, macOS, and Windows (with limitations)
+- **Colorized Output**: Clear, color-coded terminal feedback
+- **Flexible Options**: Comprehensive command-line argument support
 
 ## Requirements
 
