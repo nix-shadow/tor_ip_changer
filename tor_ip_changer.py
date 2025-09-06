@@ -68,7 +68,7 @@ os.makedirs(SECURITY_REPORT_DIR, exist_ok=True)
 
 # Import security tools
 try:
-    from security_tools_clean import perform_security_scan, scan_target_ports
+    from tor_security_tools import perform_security_scan, scan_target_ports
     SECURITY_TOOLS_AVAILABLE = True
 except ImportError:
     SECURITY_TOOLS_AVAILABLE = False
@@ -130,10 +130,21 @@ def get_tor_session():
 def is_tor_running():
     """Check if Tor is running"""
     try:
+        # First check if SOCKS port is open
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)  # 2 second timeout
+        result = sock.connect_ex(('127.0.0.1', DEFAULT_SOCKS_PORT))
+        sock.close()
+        
+        if result != 0:
+            return False
+            
+        # Then try to connect through Tor
         with get_tor_session() as session:
             response = session.get("https://check.torproject.org", timeout=10)
             return "Congratulations" in response.text
-    except:
+    except Exception as e:
+        warning(f"Tor check error: {str(e)}")
         return False
 
 #
@@ -725,7 +736,14 @@ def main():
     # Check if Tor is running first
     if not is_tor_running():
         error("Tor is not running or configured properly")
-        print("Please start the Tor service and ensure it's configured correctly")
+        print("\nTroubleshooting steps:")
+        print("1. Check if Tor is installed: sudo apt install tor")
+        print("2. Start the Tor service: sudo systemctl start tor")
+        print("3. Verify Tor is running: systemctl status tor")
+        print("4. Check if the SOCKS port is open: ss -tunlp | grep 9050")
+        print("\nIf problems persist, try:")
+        print("- Restart Tor: sudo systemctl restart tor")
+        print("- Check Tor logs: sudo journalctl -u tor@default")
         return 1
     
     # Process command line args

@@ -25,6 +25,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Check if Tor is installed
+if ! command -v tor &> /dev/null; then
+    echo -e "${RED}[!] Tor is not installed.${NC}"
+    echo -e "${YELLOW}[*] Installing Tor...${NC}"
+    sudo apt update && sudo apt install -y tor
+fi
+
 # Check for Tor service
 echo -e "${YELLOW}[*] Checking Tor service...${NC}"
 curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s https://check.torproject.org > /dev/null
@@ -34,12 +41,15 @@ if [ $? -ne 0 ]; then
     
     # Try systemd
     if command -v systemctl > /dev/null; then
-        sudo systemctl start tor
+        sudo systemctl restart tor
+        sleep 3 # Give Tor time to initialize
     # Try service
     elif command -v service > /dev/null; then
-        sudo service tor start
+        sudo service tor restart
+        sleep 3 # Give Tor time to initialize
     # Try direct tor command
     elif command -v tor > /dev/null; then
+        sudo pkill tor &>/dev/null
         tor &
         sleep 5
     else
