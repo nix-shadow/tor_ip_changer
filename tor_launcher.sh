@@ -84,45 +84,121 @@ configure_tor() {
 
 # Check for Tor service
 echo -e "${YELLOW}[*] Checking Tor service...${NC}"
-curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s https://check.torproject.org > /dev/null
-if [ $? -ne 0 ]; then
-    echo -e "${RED}[!] Tor doesn't seem to be running properly.${NC}"
+
+# First check the port is open
+if nc -z 127.0.0.1 9050 2>/dev/null; then
+    echo -e "${GREEN}[+] Tor SOCKS port is open.${NC}"
+    
+    # Try a direct connection to an IP service
+    TOR_IP=$(curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s -m 5 https://api.ipify.org 2>/dev/null)
+    
+    if [ -n "$TOR_IP" ]; then
+        echo -e "${GREEN}[+] Tor service is working. Current Tor IP: ${TOR_IP}${NC}"
+        
+        # Configure Tor for better permissions if needed
+        read -p "Do you want to configure Tor for better permissions? (y/n): " response
+        if [[ "$response" == "y" ]]; then
+            configure_tor
+        fi
+    else
+        # Try another service
+        TOR_IP=$(curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s -m 5 https://icanhazip.com 2>/dev/null)
+        
+        if [ -n "$TOR_IP" ]; then
+            echo -e "${GREEN}[+] Tor service is working. Current Tor IP: ${TOR_IP}${NC}"
+            
+            # Configure Tor for better permissions if needed
+            read -p "Do you want to configure Tor for better permissions? (y/n): " response
+            if [[ "$response" == "y" ]]; then
+                configure_tor
+            fi
+        else
+            echo -e "${RED}[!] Tor doesn't seem to be routing traffic properly.${NC}"
+            echo -e "${YELLOW}[*] Attempting to restart Tor service...${NC}"
+            
+            # Try systemd
+            if command -v systemctl > /dev/null; then
+                sudo systemctl restart tor
+                sleep 5 # Give Tor more time to initialize
+            # Try service
+            elif command -v service > /dev/null; then
+                sudo service tor restart
+                sleep 5 # Give Tor more time to initialize
+            # Try direct tor command
+            elif command -v tor > /dev/null; then
+                sudo pkill tor &>/dev/null
+                tor &
+                sleep 7
+            else
+                echo -e "${RED}[!] Could not restart Tor. Please start it manually.${NC}"
+                echo -e "${YELLOW}[*] Running Tor IP Suite in limited mode (some features may not work).${NC}"
+            fi
+            
+            # Check again with another service
+            TOR_IP=$(curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s -m 5 https://icanhazip.com 2>/dev/null)
+            if [ -n "$TOR_IP" ]; then
+                echo -e "${GREEN}[+] Tor service is now working. Current Tor IP: ${TOR_IP}${NC}"
+                
+                # Configure Tor for better permissions if needed
+                read -p "Do you want to configure Tor for better permissions? (y/n): " response
+                if [[ "$response" == "y" ]]; then
+                    configure_tor
+                fi
+            else
+                echo -e "${RED}[!] Tor is still not routing traffic properly. Limited functionality available.${NC}"
+                read -p "Do you want to continue anyway? (y/n): " response
+                if [[ "$response" != "y" ]]; then
+                    exit 1
+                fi
+            fi
+        fi
+    fi
+else
+    echo -e "${RED}[!] Tor SOCKS port is not open.${NC}"
     echo -e "${YELLOW}[*] Attempting to start Tor service...${NC}"
     
     # Try systemd
     if command -v systemctl > /dev/null; then
         sudo systemctl restart tor
-        sleep 3 # Give Tor time to initialize
+        sleep 5 # Give Tor more time to initialize
     # Try service
     elif command -v service > /dev/null; then
         sudo service tor restart
-        sleep 3 # Give Tor time to initialize
+        sleep 5
     # Try direct tor command
     elif command -v tor > /dev/null; then
         sudo pkill tor &>/dev/null
         tor &
-        sleep 5
+        sleep 7
     else
         echo -e "${RED}[!] Could not start Tor. Please start it manually.${NC}"
         echo -e "${YELLOW}[*] Running Tor IP Suite in limited mode (some features may not work).${NC}"
     fi
     
     # Check again
-    curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s https://check.torproject.org > /dev/null
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}[!] Tor is still not running properly. Limited functionality available.${NC}"
+    if nc -z 127.0.0.1 9050 2>/dev/null; then
+        TOR_IP=$(curl --socks5 127.0.0.1:9050 --socks5-hostname 127.0.0.1:9050 -s -m 5 https://api.ipify.org 2>/dev/null)
+        if [ -n "$TOR_IP" ]; then
+            echo -e "${GREEN}[+] Tor service is now working. Current Tor IP: ${TOR_IP}${NC}"
+            
+            # Configure Tor for better permissions if needed
+            read -p "Do you want to configure Tor for better permissions? (y/n): " response
+            if [[ "$response" == "y" ]]; then
+                configure_tor
+            fi
+        else
+            echo -e "${RED}[!] Tor is not routing traffic properly. Limited functionality available.${NC}"
+            read -p "Do you want to continue anyway? (y/n): " response
+            if [[ "$response" != "y" ]]; then
+                exit 1
+            fi
+        fi
+    else
+        echo -e "${RED}[!] Tor SOCKS port is still not open. Limited functionality available.${NC}"
         read -p "Do you want to continue anyway? (y/n): " response
         if [[ "$response" != "y" ]]; then
             exit 1
         fi
-    fi
-else
-    echo -e "${GREEN}[+] Tor service is running properly.${NC}"
-    
-    # Configure Tor for better permissions if needed
-    read -p "Do you want to configure Tor for better permissions? (y/n): " response
-    if [[ "$response" == "y" ]]; then
-        configure_tor
     fi
 fi
 

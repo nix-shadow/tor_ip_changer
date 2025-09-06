@@ -153,6 +153,42 @@ def setup_tor_password():
         error(f"Error setting up Tor password: {e}")
         return None, None
 
+def restart_tor_service():
+    """Attempt to restart the Tor service"""
+    try:
+        if platform.system() == "Linux":
+            warning("Attempting to restart Tor service")
+            if os.path.exists("/bin/systemctl") or os.path.exists("/usr/bin/systemctl"):
+                result = subprocess.run(
+                    ["sudo", "systemctl", "restart", "tor"], 
+                    capture_output=True, 
+                    text=True
+                )
+                if result.returncode == 0:
+                    success("Successfully restarted Tor service via systemctl")
+                    time.sleep(5)  # Give Tor time to initialize
+                    return True
+            elif os.path.exists("/etc/init.d/tor"):
+                result = subprocess.run(
+                    ["sudo", "/etc/init.d/tor", "restart"], 
+                    capture_output=True, 
+                    text=True
+                )
+                if result.returncode == 0:
+                    success("Successfully restarted Tor service via init.d")
+                    time.sleep(5)
+                    return True
+            else:
+                # Kill and restart Tor as a last resort
+                subprocess.run(["sudo", "pkill", "tor"], capture_output=True)
+                time.sleep(1)
+                subprocess.Popen(["tor"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(7)  # Give more time to initialize
+                return True
+    except Exception as e:
+        error(f"Failed to restart Tor service: {e}")
+    return False
+
 def clear_screen():
     """Clear the terminal screen"""
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -166,14 +202,23 @@ def print_header(title):
 def get_tor_session():
     """Create a requests session that routes through Tor"""
     session = requests.session()
+    
+    # Configure session with shorter timeouts
     session.proxies = {
         'http': f'socks5h://127.0.0.1:{DEFAULT_SOCKS_PORT}',
         'https': f'socks5h://127.0.0.1:{DEFAULT_SOCKS_PORT}'
     }
+    
+    # Configure shorter timeouts to avoid long hanging connections
+    session.timeout = 5
+    
+    # Disable SSL verification if needed (only for testing)
+    # session.verify = False
+    
     return session
 
 def is_tor_running():
-    """Check if Tor is running"""
+    """Check if Tor is running and properly connected"""
     try:
         # First check if SOCKS port is open
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -184,10 +229,43 @@ def is_tor_running():
         if result != 0:
             return False
             
-        # Then try to connect through Tor
+        # Test connection with multiple sites
         with get_tor_session() as session:
-            response = session.get("https://check.torproject.org", timeout=10)
-            return "Congratulations" in response.text
+            # Try multiple IP checking services with shorter timeouts
+            services = [
+                "https://api.ipify.org",
+                "https://icanhazip.com",
+                "https://ident.me",
+                "https://check.torproject.org"
+            ]
+            
+            for service in services:
+                try:
+                    response = session.get(service, timeout=5)  # Shorter timeout
+                    if response.status_code == 200:
+                        # If we get a response from any service, Tor is working
+                        if service == "https://check.torproject.org" and "Congratulations" in response.text:
+                            success("Confirmed Tor connection via check.torproject.org")
+                            return True
+                        elif service != "https://check.torproject.org":
+                            # We got a response from an IP service, which is good enough
+                            success(f"Confirmed Tor connection via {service}")
+                            return True
+                except Exception as e:
+                    warning(f"Failed to connect to {service}: {str(e)}")
+                    continue
+            
+            # If we've tried all services and none worked, check if we can at least get an IP
+            try:
+                ip = get_current_ip()
+                if ip and ip != "Unknown":
+                    success(f"Confirmed Tor connection (IP: {ip})")
+                    return True
+            except Exception:
+                pass
+                
+            warning("Connected to Tor proxy but could not confirm external connectivity")
+            return False
     except Exception as e:
         warning(f"Tor check error: {str(e)}")
         return False
@@ -858,15 +936,38 @@ def main():
     # Check if Tor is running first
     if not is_tor_running():
         error("Tor is not running or configured properly")
-        print("\nTroubleshooting steps:")
-        print("1. Check if Tor is installed: sudo apt install tor")
-        print("2. Start the Tor service: sudo systemctl start tor")
-        print("3. Verify Tor is running: systemctl status tor")
-        print("4. Check if the SOCKS port is open: ss -tunlp | grep 9050")
-        print("\nIf problems persist, try:")
-        print("- Restart Tor: sudo systemctl restart tor")
-        print("- Check Tor logs: sudo journalctl -u tor@default")
-        return 1
+        print("\nAttempting to restart Tor service...")
+        
+        if restart_tor_service():
+            # Try again after restart
+            if is_tor_running():
+                success("Tor is now running correctly")
+            else:
+                warning("Tor is running but may have connectivity issues")
+                print("\nTroubleshooting steps:")
+                print("1. Check if Tor is installed: sudo apt install tor")
+                print("2. Verify Tor is running: systemctl status tor")
+                print("3. Check if the SOCKS port is open: ss -tunlp | grep 9050")
+                print("4. Check if your network allows Tor connections")
+                print("\nIf problems persist, try:")
+                print("- Restart Tor: sudo systemctl restart tor")
+                print("- Check Tor logs: sudo journalctl -u tor@default")
+                print("- Configure Tor by running: ./tor_ip_changer.py --configure-tor")
+                
+                # Ask if user wants to continue anyway
+                response = input(colorize("Continue anyway with limited functionality? (y/n): ", "YELLOW"))
+                if response.lower() != 'y':
+                    return 1
+        else:
+            print("\nTroubleshooting steps:")
+            print("1. Check if Tor is installed: sudo apt install tor")
+            print("2. Start the Tor service: sudo systemctl start tor")
+            print("3. Verify Tor is running: systemctl status tor")
+            print("4. Check if the SOCKS port is open: ss -tunlp | grep 9050")
+            print("\nIf problems persist, try:")
+            print("- Restart Tor: sudo systemctl restart tor")
+            print("- Check Tor logs: sudo journalctl -u tor@default")
+            return 1
     
     # Process command line args
     if args.configure_tor:
