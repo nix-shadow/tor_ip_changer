@@ -23,22 +23,27 @@ from collections import Counter
 
 VERSION = "3.5.0"
 
-# Auto-install required packages
+# Handle dependencies
+packages_missing = False
 try:
     import requests
+except ImportError:
+    packages_missing = True
+try:
     import stem
     from stem import Signal
     from stem.control import Controller
 except ImportError:
-    print("[!] Installing required packages...")
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", 
-        "--quiet", "requests", "stem", "PySocks"
-    ])
-    import requests
-    import stem
-    from stem import Signal
-    from stem.control import Controller
+    packages_missing = True
+
+# Check for missing packages
+if packages_missing:
+    print(f"{COLORS['RED']}[!] Required packages are missing.{COLORS['RESET']}")
+    print(f"{COLORS['YELLOW']}Please install the required packages using:{COLORS['RESET']}")
+    print("\n    pip install requests stem PySocks\n")
+    print("Or activate the virtual environment:")
+    print(f"\n    source {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venv/bin/activate')}\n")
+    sys.exit(1)
 
 # ANSI colors for terminal output
 COLORS = {

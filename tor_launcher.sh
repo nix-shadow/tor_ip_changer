@@ -99,4 +99,18 @@ fi
 
 # Forward arguments to the Python script
 echo -e "${GREEN}[+] Launching Tor IP Suite...${NC}"
+
+# Check if virtual environment exists
+VENV_PATH="$DIR/venv"
+if [ -d "$VENV_PATH" ]; then
+    echo -e "${YELLOW}[*] Activating virtual environment...${NC}"
+    source "$VENV_PATH/bin/activate"
+fi
+
+# Run the script
 python3 "$DIR/tor_ip_changer.py" "$@"
+
+# Deactivate virtual environment if it was activated
+if [ -n "$VIRTUAL_ENV" ]; then
+    deactivate 2>/dev/null
+fi
